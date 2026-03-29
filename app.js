@@ -5,13 +5,28 @@ require('dotenv').config();
 
 app.set('view engine', 'ejs');
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
 
 app.get('/', (req, res) => {
   res.render('index');
 });
 
 app.post('/ask', async (req, res) => {
-  const question = req.body.question;
+  let messages = req.body.messages;
+  if (!messages || messages.length === 0) {
+    messages = [
+      { role: 'system', content: 'You are Grok, a helpful and maximally truthful AI built by xAI. You only answer questions related to technology, programming, software, hardware, and related technical fields. If a question is not about technology, politely decline to answer and suggest rephrasing it to a technology-related topic.' },
+      { role: 'user', content: req.body.question }
+    ];
+  } else {
+    // Ensure system message is present
+    if (messages[0].role !== 'system') {
+      messages.unshift({
+        role: 'system',
+        content: 'You are Grok, a helpful and maximally truthful AI built by xAI. You only answer questions related to technology, programming, software, hardware, and related technical fields. If a question is not about technology, politely decline to answer and suggest rephrasing it to a technology-related topic.'
+      });
+    }
+  }
   try {
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
@@ -21,10 +36,7 @@ app.post('/ask', async (req, res) => {
       },
       body: JSON.stringify({
         model: 'grok-4-0709', // or latest model, check docs
-        messages: [
-          { role: 'system', content: 'You are Grok, a helpful and maximally truthful AI built by xAI. You only answer questions related to technology, programming, software, hardware, and related technical fields. If a question is not about technology, politely decline to answer and suggest rephrasing it to a technology-related topic.' },
-          { role: 'user', content: question }
-        ]
+        messages: messages
       })
     });
     if (!response.ok) {
@@ -35,13 +47,15 @@ app.post('/ask', async (req, res) => {
     if (data.choices && data.choices[0]) {
       const rawAnswer = data.choices[0].message.content;
       const answer = marked.parse(rawAnswer);
-      res.json({ answer });
+      res.json({ answer, raw: rawAnswer });
     } else {
-      res.render('index', { answer: '<p>Error: No response from API</p>' });
+      const errorMsg = 'Error: No response from API';
+      res.json({ answer: '<p>' + errorMsg + '</p>', raw: errorMsg });
     }
   } catch (error) {
     console.error(error);
-    res.json({ answer: '<p>Error: ' + error.message + '</p>' });
+    const errorMsg = 'Error: ' + error.message;
+    res.json({ answer: '<p>' + errorMsg + '</p>', raw: errorMsg });
   }
 });
 
